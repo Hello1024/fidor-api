@@ -7,6 +7,7 @@ class Transaction:
   def __init__(self, cols):
     self.date = cols[0]
     self.description = cols[1]
+    self.description1 = cols[2]
     self.billpay = False
     self.fasterpay = False
     self.name = None
@@ -22,12 +23,12 @@ class Transaction:
       self.reference, self.name = m.groups()
       self.fasterpay = True
     
-    money_amount = cols[2] or cols[3]
-    assert money_amount[0] == u'\xa3'
-    self.amount_str = money_amount[1:]
-    self.amount = float(money_amount[1:].replace(',', ''))
-    if cols[3]:
-      self.amount = -self.amount
+    money_amount = cols[3]
+    #assert money_amount[0] == u'\xa3'
+    #self.amount_str = money_amount[1:]
+    #self.amount = float(money_amount[1:].replace(',', ''))
+    #if cols[3]:
+    #  self.amount = -self.amount
 
   def __eq__(self, other):
     if isinstance(other, Transaction):
@@ -54,57 +55,31 @@ class Fidor:
     """
     self.br = mechanize.Browser()
     self.br.addheaders = [('User-agent', 'Fidor API (https://github.com/Hello1024/Fidor-api)')]
-    self.customer_id = customer_id
-    self.questions = questions
+    self.email = email
     self.password = password
-    self.security_number = security_number
     self.cachedTransactionSoupTime = 0
     
   def _loginAndOpen(self, url):
     br = self.br
-    self.response = page1 = br.open(url)
+    try:
+      self.response = page1 = br.open(url)
+    except mechanize.HTTPError, response:
+      self.response = page1 = br.open("https://banking.fidorbank.uk/users/sign_in")
     
-    # Not now on the login page?  We're probably logged in!
-    if 'formCustomerID_1' not in [x.name for x in list(br.forms())]:
+    if not br.viewing_html():
       return
 
-    br.select_form('formCustomerID_1')
-    br['infoLDAP_E.customerID'] = self.customer_id
-    self.response = br.submit()
-    
-    responsestr = self.response.read()
-    found=0
+    # Not now on the login page?  We're probably logged in!
+    if 'new_user' not in [x.attrs.get('id', None) for x in list(br.forms())]:
+      return
+
     br.select_form(nr=0)
-    
-    if br.form.attrs['id'] == 'formCustomerID':
-      for q,a in self.questions.iteritems():
-        if q in responsestr:
-          br['cbQuestionChallenge.responseUser'] = a
-          found=found+1
-      assert found==1, "Looks like you have the wrong authentication questions"
-
-      self.response = br.submit()
-      found=0    
-      br.select_form(nr=0)
-    
-    assert br.form.attrs['id'] == 'formAuthenticationAbbey', "Looks like you have the wrong customer ID or authentication answers"
-    for i in range(len(self.password)):
-      for c in br.form.controls:
-        if hasattr(c, 'id') and c.id == "signPosition" + str(i+1):
-          c.value = self.password[i]
-          found=found+1
-
-    for i in range(len(self.security_number)):
-      for c in br.form.controls:
-        if hasattr(c, 'id') and c.id == "passwordPosition" + str(i+1):
-          c.value = self.security_number[i]
-          found=found+1
-    
-    assert found==6
+    br['user[email]'] = self.email
+    br['user[password]'] = self.password
     self.response = br.submit()
-    self.response = br.open(url)
-    assert 'formCustomerID_1' not in [x.name for x in list(br.forms())], "Login probably failed"
-    
+    assert 'new_user' not in [x.attrs.get('id', None) for x in list(br.forms())], "Login probably failed"
+
+    return self._loginAndOpen(url)
 
   def selectAccount(self, sort_code, account_number):
     """Unimplemented"""
@@ -112,8 +87,8 @@ class Fidor:
 
 
   def _uncachedGetViewTransactionsSoup(self):
-    self._loginAndOpen('https://retail.Fidor.co.uk/EBAN_Accounts_ENS/BtoChannelDriver.ssobto?dse_operationName=ViewTransactions')
-    return BeautifulSoup.BeautifulSoup(self.response.read())
+    self._loginAndOpen('https://banking.fidorbank.uk/smart-account/transactions.csv')
+    return self.response.read()
 
   # We cache this by default because Fidors data isn't always up to date
   # and you'll get banned if a runaway script polls this every few seconds.
@@ -146,16 +121,14 @@ class Fidor:
       A generator which yields Transaction objects for recent transactions.
     """
     soup = self._getViewTransactionsSoup()
-    tx_table = soup.findAll("table",  {"class": "cardlytics_history_table data"})[0]
-    
-    rows = tx_table.findAll('tr')
-    for row in rows:
-      cols = row.findAll('td')
-      cols = [ele.text.strip() for ele in cols]
-      
-      if len(cols) == 0:
+    soup =  soup.split('\n', 1)[-1]
+
+    for line in soup.split('\n'):
+      if line == "":
         continue
-      
+      cols = line.split(';')
+      assert len(cols) == 4, "bad transaction data"
+
       tx = Transaction(cols) 
       yield tx
   
