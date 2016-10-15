@@ -41,10 +41,10 @@ class Transaction:
   def __repr__(self):
     return str(self.__dict__)
 
-class Santander:
+class Fidor:
 
-  def __init__(self, customer_id, questions, password, security_number):
-    """Create an object pointing at a santander online account
+  def __init__(self, email, password):
+    """Create an object pointing at a Fidor online account
     
     Args:
       customer_id:   string representing a customer ID.  Eg. '12828282'
@@ -53,7 +53,7 @@ class Santander:
       security_number:  5 digit account security number (string).
     """
     self.br = mechanize.Browser()
-    self.br.addheaders = [('User-agent', 'Santander API (https://github.com/Hello1024/santander-api)')]
+    self.br.addheaders = [('User-agent', 'Fidor API (https://github.com/Hello1024/Fidor-api)')]
     self.customer_id = customer_id
     self.questions = questions
     self.password = password
@@ -112,10 +112,10 @@ class Santander:
 
 
   def _uncachedGetViewTransactionsSoup(self):
-    self._loginAndOpen('https://retail.santander.co.uk/EBAN_Accounts_ENS/BtoChannelDriver.ssobto?dse_operationName=ViewTransactions')
+    self._loginAndOpen('https://retail.Fidor.co.uk/EBAN_Accounts_ENS/BtoChannelDriver.ssobto?dse_operationName=ViewTransactions')
     return BeautifulSoup.BeautifulSoup(self.response.read())
 
-  # We cache this by default because santanders data isn't always up to date
+  # We cache this by default because Fidors data isn't always up to date
   # and you'll get banned if a runaway script polls this every few seconds.
   def _getViewTransactionsSoup(self):
     if self.cachedTransactionSoupTime + 60 < time.time():
@@ -163,7 +163,7 @@ class Santander:
     """Makes a payment from your account to a remote account.
     
     To set up:
-      Log in to santander in a browser
+      Log in to Fidor in a browser
       My details and settings
       Change OTP service phone number
       Put a number from https://www.textmagic.com/free-tools/receive-free-sms-online in.
@@ -186,7 +186,7 @@ class Santander:
     assert len(to_account_number) == 8
     
 
-    self._loginAndOpen('https://retail.santander.co.uk/EBAN_Payees_ENS/BtoChannelDriver.ssobto?dse_operationName=setUpNewPayment')
+    self._loginAndOpen('https://retail.Fidor.co.uk/EBAN_Payees_ENS/BtoChannelDriver.ssobto?dse_operationName=setUpNewPayment')
 
     self.br.follow_link(text_regex="Pay a new person")
     self.br.select_form('formDatas')
