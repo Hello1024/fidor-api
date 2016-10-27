@@ -2,12 +2,15 @@ import mechanize
 import BeautifulSoup
 import re
 import time
+from datetime import datetime
 
 class Transaction:
   def __init__(self, cols):
+    self.timestamp = datetime.now()
+    self.bank="Fidor"
     self.date = cols[0]
-    self.description = cols[1]
-    self.description1 = cols[2]
+    self.description = cols[1].decode('iso-8859-1')
+    self.description1 = cols[2].decode('iso-8859-1')
     self.billpay = False
     self.fasterpay = False
     self.name = None
@@ -24,15 +27,14 @@ class Transaction:
       self.fasterpay = True
     
     money_amount = cols[3]
-    #assert money_amount[0] == u'\xa3'
-    #self.amount_str = money_amount[1:]
-    #self.amount = float(money_amount[1:].replace(',', ''))
+    self.amount_str = money_amount
+    self.amount = float(money_amount.replace(',', ''))
     #if cols[3]:
     #  self.amount = -self.amount
 
   def __eq__(self, other):
     if isinstance(other, Transaction):
-      return ((self.description == other.description) and (self.amount == other.amount) and (self.date == other.date))
+      return ((self.description == other.description) and (self.amount == other.amount))
     else:
       return False
 
@@ -59,13 +61,15 @@ class Fidor:
     self.password = password
     self.cachedTransactionSoupTime = 0
     
-  def _loginAndOpen(self, url):
+  def _loginAndOpen(self, url, tries=0):
     br = self.br
     try:
       self.response = page1 = br.open(url)
     except mechanize.HTTPError, response:
       self.response = page1 = br.open("https://banking.fidorbank.uk/users/sign_in")
     
+    assert tries < 3, "Tried to log in repeatedly.  Your account is probably blocked"
+
     if not br.viewing_html():
       return
 
@@ -79,7 +83,7 @@ class Fidor:
     self.response = br.submit()
     assert 'new_user' not in [x.attrs.get('id', None) for x in list(br.forms())], "Login probably failed"
 
-    return self._loginAndOpen(url)
+    return self._loginAndOpen(url, tries=tries+1)
 
   def selectAccount(self, sort_code, account_number):
     """Unimplemented"""
